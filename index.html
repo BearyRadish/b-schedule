@@ -466,10 +466,14 @@
         }
 
         function generateSchedule() {
+            console.log('Generate schedule button clicked');
+            
             const date = document.getElementById('scheduleDate').value;
             const dayType = document.getElementById('dayType').value;
             const morningDuty = document.getElementById('morningDuty').value;
             const eveningDuty = document.getElementById('eveningDuty').value;
+
+            console.log('Input values:', { date, dayType, morningDuty, eveningDuty });
 
             // Validate different people for morning and evening
             if (morningDuty === eveningDuty) {
@@ -487,27 +491,41 @@
                 });
             });
 
+            console.log('Available staff:', availableStaff.length);
+
             if (availableStaff.length === 0) {
                 alert('没有可用的员工！请检查人员状态。');
                 return;
             }
 
-            // Generate schedule based on day type
-            currentSchedule = createSchedule(availableStaff, dayType, morningDuty, eveningDuty);
-            
-            // Display results
-            displaySchedule(currentSchedule, date);
-            
-            // Generate share link
-            const shareUrl = generateShareLink(date, currentSchedule);
-            document.getElementById('shareLink').value = shareUrl;
-            
-            // Show result and scroll to it
-            document.getElementById('scheduleResult').classList.remove('hidden');
-            document.getElementById('scheduleResult').scrollIntoView({ behavior: 'smooth' });
-            
-            // Save to localStorage for employee view
-            localStorage.setItem('currentSchedule', JSON.stringify(currentSchedule));
+            try {
+                // Generate schedule based on day type
+                currentSchedule = createSchedule(availableStaff, dayType, morningDuty, eveningDuty);
+                console.log('Schedule created:', currentSchedule);
+                
+                // Display results
+                displaySchedule(currentSchedule, date);
+                
+                // Generate share link
+                const shareUrl = generateShareLink(date, currentSchedule);
+                document.getElementById('shareLink').value = shareUrl;
+                
+                // Show result and scroll to it
+                const resultDiv = document.getElementById('scheduleResult');
+                resultDiv.classList.remove('hidden');
+                console.log('Result div shown');
+                
+                setTimeout(() => {
+                    resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+                
+                // Save to localStorage for employee view
+                localStorage.setItem('currentSchedule', JSON.stringify(currentSchedule));
+                console.log('Schedule saved to localStorage');
+            } catch (error) {
+                console.error('Error generating schedule:', error);
+                alert('生成排班表时出错: ' + error.message);
+            }
         }
 
         function createSchedule(staff, dayType, morningDuty, eveningDuty) {
