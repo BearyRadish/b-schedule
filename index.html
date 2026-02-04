@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B区排班管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        input[type="date"], select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input[type="date"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .staff-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .staff-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .staff-item:hover {
+            background: #e8e8e8;
+        }
+        .staff-item.selected {
+            background: #667eea;
+            color: white;
+        }
+        .staff-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        .staff-item label {
+            margin: 0;
+            cursor: pointer;
+            flex: 1;
+        }
+        .staff-item.absent {
+            opacity: 0.5;
+            background: #ffebee;
+        }
+        .staff-item.vacation {
+            opacity: 0.5;
+            background: #fff3e0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            margin-left: 10px;
+        }
+        .btn-secondary:hover {
+            background: #e0e0e0;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        .schedule-output {
+            margin-top: 30px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: #f5f5f5;
+        }
+        .time-slot {
+            font-weight: 600;
+            color: #667eea;
+        }
+        .share-link {
+            background: #f0f0f0;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .share-link input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-duty {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        .badge-inventory {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+        .badge-cleaning {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        .hidden {
+            display: none;
+        }
+        .employee-view {
+            text-align: center;
+            padding: 40px;
+        }
+        .employee-selector {
+            margin: 30px 0;
+        }
+        .schedule-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-top: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            text-align: left;
+        }
+        .schedule-item {
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .schedule-time {
+            font-weight: 600;
+            color: #667eea;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Manager View -->
+        <div id="managerView">
+            <div class="header">
+                <h1>🏢 B区排班管理系统</h1>
+                <p>Store Manager Dashboard - 店长管理后台</p>
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('manager')">店长排班</div>
+                <div class="tab" onclick="switchTab('employee')">员工查看</div>
+            </div>
+
+            <div class="card">
+                <h2>📅 基本信息</h2>
+                <div class="form-group">
+                    <label>排班日期</label>
+                    <input type="date" id="scheduleDate" value="2026-02-05">
+                </div>
+                <div class="form-group">
+                    <label>日期类型</label>
+                    <select id="dayType">
+                        <option value="weekday">工作日 (17人配置)</option>
+                        <option value="weekend">周末/节假日 (24人配置)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>👥 人员状态管理</h2>
+                <p style="margin-bottom: 15px; color: #666;">
+                    点击标记人员状态：正常出勤 ✅ | 请假/休假 🏖️ | 病假 🤒
+                </p>
+                
+                <h3 style="margin: 20px 0 10px; color: #333;">A班人员</h3>
+                <div class="staff-grid" id="groupA"></div>
+
+                <h3 style="margin: 20px 0 10px; color: #333;">B班人员</h3>
+                <div class="staff-grid" id="groupB"></div>
+
+                <h3 style="margin: 20px 0 10px; color: #333;">C班人员</h3>
+                <div class="staff-grid" id="groupC"></div>
+
+                <h3 style="margin: 20px 0 10px; color: #333;">D班人员</h3>
+                <div class="staff-grid" id="groupD"></div>
+
+                <h3 style="margin: 20px 0 10px; color: #333;">E班人员</h3>
+                <div class="staff-grid" id="groupE"></div>
+            </div>
+
+            <div class="card">
+                <h2>👔 管理层配置</h2>
+                <div class="form-group">
+                    <label>早班DUTY</label>
+                    <select id="morningDuty" onchange="updateEveningDutyOptions()">
+                        <option value="陈雪莲">陈雪莲 (主要)</option>
+                        <option value="张晟来">张晟来</option>
+                        <option value="赵欣">赵欣</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>晚班DUTY</label>
+                    <select id="eveningDuty">
+                        <option value="陈雪莲">陈雪莲</option>
+                        <option value="赵欣" selected>赵欣 (主要)</option>
+                        <option value="张晟来">张晟来</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="card" style="text-align: center;">
+                <button class="btn" onclick="generateSchedule()">🚀 生成排班表</button>
+                <button class="btn btn-secondary" onclick="resetForm()">重置</button>
+            </div>
+
+            <div id="scheduleResult" class="hidden">
+                <div class="card">
+                    <h2>📋 生成结果</h2>
+                    <div id="scheduleTable"></div>
+                    
+                    <div class="share-link">
+                        <h3>🔗 员工查看链接</h3>
+                        <p>复制此链接发送给员工，员工可选择自己的名字查看当日排班</p>
+                        <input type="text" id="shareLink" readonly onclick="this.select()">
+                        <button class="btn" style="margin-top: 10px;" onclick="copyLink()">复制链接</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Employee View -->
+        <div id="employeeView" class="hidden">
+            <div class="header">
+                <h1>📱 我的排班</h1>
+                <p>Employee Schedule View - 员工个人排班查看</p>
+            </div>
+
+            <div class="card employee-view">
+                <h2>请选择您的姓名</h2>
+                <div class="employee-selector">
+                    <select id="employeeSelect" style="width: 300px; max-width: 100%;">
+                        <option value="">-- 选择姓名 --</option>
+                    </select>
+                </div>
+                <button class="btn" onclick="viewMySchedule()">查看我的排班</button>
+                
+                <div id="mySchedule" class="hidden">
+                    <div class="schedule-card">
+                        <h3 id="myScheduleTitle"></h3>
+                        <div id="myScheduleContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn btn-secondary" onclick="switchTab('manager')">返回店长后台</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Staff database based on the analysis
+        const staffDB = {
+            A班: ['张一明', '王斌夏', '张程俊', '张乃芝', '杨旺', '陈泽宏', '于琪', '涂丽玲'],
+            B班: ['虞稳彬', '张康', '李嘉欣', '郭嘉诚', '杜震', '罗晓燕', '沈明羽'],
+            C班: ['王峰', '陈珍', '周腾飞', '沈思辰', '张一鸣'],
+            D班: ['甘澍', '龚儒馨', '朱盛祺', '高瑞昂', '李佳霖', '姚静宜', '洪瑾', '张思彤'],
+            E班: ['梁景焱', '盛家贺', '吕淼', '赵思涵', '于浩然']
+        };
+
+        // Station assignments based on analysis
+        const stationSkills = {
+            '张一明': ['OMNI', '手作', '主机'],
+            '王斌夏': ['保龄球', 'OMNI', '射击'],
+            '张乃芝': ['OMNI', '手作', '主机'],
+            '龚儒馨': ['OMNI', 'DBOX', '沙盘赛车'],
+            '甘澍': ['翼装飞行', 'OMNI', '滑雪机'],
+            '杜震': ['皮划艇', '射击', '射箭'],
+            '于浩然': ['DBOX', '沙盘赛车', '保龄球'],
+            '张康': ['OMNI', '射击', '皮划艇'],
+            '李嘉欣': ['手作', '射击', '保龄球'],
+            '梁景焱': ['保龄球', 'OMNI', '飞镖'],
+            '虞稳彬': ['保龄球', '沙盘赛车', '翼装飞行'],
+            '罗晓燕': ['保龄球', '皮划艇', '滑雪机'],
+            '张诗晗': ['翼装飞行', '滑雪机', '冲浪板'],
+            '金越': ['机动', '管理']
+        };
+
+        // Staff status tracking
+        let staffStatus = {};
+
+        // Initialize
+        function init() {
+            renderStaffGrid();
+            populateEmployeeSelect();
+            
+            // Check if we're in employee view mode (from URL)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('view') === 'employee') {
+                switchTab('employee');
+            }
+        }
+
+        function renderStaffGrid() {
+            Object.keys(staffDB).forEach(group => {
+                const container = document.getElementById('group' + group.replace('班', ''));
+                container.innerHTML = staffDB[group].map(name => `
+                    <div class="staff-item selected" data-name="${name}" onclick="toggleStaffStatus(this, '${name}')">
+                        <input type="checkbox" checked onchange="event.stopPropagation()">
+                        <label>${name}</label>
+                    </div>
+                `).join('');
+            });
+        }
+
+        function toggleStaffStatus(element, name) {
+            const checkbox = element.querySelector('input');
+            checkbox.checked = !checkbox.checked;
+            
+            if (!checkbox.checked) {
+                // Cycle through: absent -> vacation -> normal
+                if (element.classList.contains('absent')) {
+                    element.classList.remove('absent');
+                    element.classList.add('vacation');
+                    staffStatus[name] = 'vacation';
+                } else if (element.classList.contains('vacation')) {
+                    element.classList.remove('vacation');
+                    element.classList.remove('selected');
+                    staffStatus[name] = 'off';
+                } else {
+                    element.classList.add('absent');
+                    element.classList.remove('selected');
+                    staffStatus[name] = 'sick';
+                }
+            } else {
+                element.classList.remove('absent', 'vacation');
+                element.classList.add('selected');
+                staffStatus[name] = 'normal';
+            }
+        }
+
+        // Store the generated schedule globally for employee view
+        let currentSchedule = null;
+
+        function updateEveningDutyOptions() {
+            const morningDuty = document.getElementById('morningDuty').value;
+            const eveningSelect = document.getElementById('eveningDuty');
+            const options = eveningSelect.querySelectorAll('option');
+            
+            options.forEach(option => {
+                if (option.value === morningDuty) {
+                    option.disabled = true;
+                    option.style.color = '#ccc';
+                } else {
+                    option.disabled = false;
+                    option.style.color = '';
+                }
+            });
+            
+            // If currently selected evening duty is same as morning, change it
+            if (eveningSelect.value === morningDuty) {
+                const availableOptions = Array.from(options).filter(o => !o.disabled && o.value);
+                if (availableOptions.length > 0) {
+                    eveningSelect.value = availableOptions[0].value;
+                }
+            }
+        }
+
+        function generateSchedule() {
+            const date = document.getElementById('scheduleDate').value;
+            const dayType = document.getElementById('dayType').value;
+            const morningDuty = document.getElementById('morningDuty').value;
+            const eveningDuty = document.getElementById('eveningDuty').value;
+
+            // Validate different people for morning and evening
+            if (morningDuty === eveningDuty) {
+                alert('早班DUTY和晚班DUTY不能是同一个人！请选择不同的负责人。');
+                return;
+            }
+
+            // Get available staff
+            const availableStaff = [];
+            Object.keys(staffDB).forEach(group => {
+                staffDB[group].forEach(name => {
+                    if (staffStatus[name] !== 'sick' && staffStatus[name] !== 'vacation' && staffStatus[name] !== 'off') {
+                        availableStaff.push({ name, group, skills: stationSkills[name] || ['机动'] });
+                    }
+                });
+            });
+
+            if (availableStaff.length === 0) {
+                alert('没有可用的员工！请检查人员状态。');
+                return;
+            }
+
+            // Generate schedule based on day type
+            currentSchedule = createSchedule(availableStaff, dayType, morningDuty, eveningDuty);
+            
+            // Display results
+            displaySchedule(currentSchedule, date);
+            
+            // Generate share link
+            const shareUrl = generateShareLink(date, currentSchedule);
+            document.getElementById('shareLink').value = shareUrl;
+            
+            // Show result and scroll to it
+            document.getElementById('scheduleResult').classList.remove('hidden');
+            document.getElementById('scheduleResult').scrollIntoView({ behavior: 'smooth' });
+            
+            // Save to localStorage for employee view
+            localStorage.setItem('currentSchedule', JSON.stringify(currentSchedule));
+        }
+
+        function createSchedule(staff, dayType, morningDuty, eveningDuty) {
+            const timeSlots = [
+                '9:00-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:30',
+                '13:30-14:30', '14:30-16:00', '16:00-17:00', '17:00-18:00',
+                '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00', '22:00-22:30'
+            ];
+
+            const stations = {
+                opening: ['沙盘赛车', '拍照机', 'MF', '派对房', 'OMNI', '滑雪机', '冲浪板', '皮划艇', 'DBOX', '翼装飞行', '主机', '保龄球', '飞镖', '射击', '射箭', '手作区'],
+                main: ['OMNI', 'MF', 'DBOX', '沙盘赛车', '翼装飞行', '保龄球', '飞镖', '射击', '射箭', '滑雪机', '皮划艇', '冲浪板', '主机', '手作'],
+                closing: ['皮划艇', '滑雪机', '冲浪板', '保龄球', 'OMNI', 'MF', 'DBOX', '翼装飞行', '沙盘赛车', '主机', '派对房', '手作']
+            };
+
+            // Assign staff to stations based on their skills
+            const assignments = [];
+            
+            // Morning opening
+            assignments.push({
+                time: '9:00-10:00',
+                type: 'opening',
+                tasks: [
+                    { task: '开档清洁&检查', stations: stations.opening.slice(0, 4), staff: staff.slice(0, 3).map(s => s.name) },
+                    { task: '开档清洁', stations: stations.opening.slice(4, 8), staff: staff.slice(3, 6).map(s => s.name) },
+                    { task: '开档清洁', stations: stations.opening.slice(8, 12), staff: staff.slice(6, 9).map(s => s.name) },
+                    { task: '开档清洁', stations: stations.opening.slice(12), staff: staff.slice(9, 12).map(s => s.name) }
+                ]
+            });
+
+            // Main shifts - assign based on skills
+            for (let i = 1; i < timeSlots.length - 1; i++) {
+                const slotAssignments = [];
+                const availableForSlot = staff.filter(s => !slotAssignments.find(a => a.staff === s.name));
+                
+                // Assign to stations based on skills
+                stations.main.forEach((station, idx) => {
+                    const qualified = availableForSlot.filter(s => s.skills && s.skills.includes(station));
+                    if (qualified.length > 0) {
+                        const assigned = qualified[idx % qualified.length];
+                        slotAssignments.push({ station, staff: assigned.name });
+                    }
+                });
+
+                assignments.push({
+                    time: timeSlots[i],
+                    type: 'main',
+                    assignments: slotAssignments
+                });
+            }
+
+            // Closing
+            assignments.push({
+                time: '22:00-22:30',
+                type: 'closing',
+                tasks: [
+                    { task: '闭档清洁&检查', stations: stations.closing.slice(0, 4), staff: staff.slice(0, 3).map(s => s.name) },
+                    { task: '闭档清洁', stations: stations.closing.slice(4, 8), staff: staff.slice(3, 6).map(s => s.name) },
+                    { task: '闭档清洁', stations: stations.closing.slice(8, 12), staff: staff.slice(6, 9).map(s => s.name) },
+                    { task: '闭档清洁', stations: stations.closing.slice(12), staff: staff.slice(9, 12).map(s => s.name) }
+                ]
+            });
+
+            return {
+                date: document.getElementById('scheduleDate').value,
+                dayType,
+                morningDuty,
+                eveningDuty,
+                dutyLeaders: { morning: '金越', evening: '张诗晗' },
+                inventory: {
+                    drinks: staff.find(s => s.skills && s.skills.includes('保龄球'))?.name || staff[0]?.name || '待定',
+                    claw: staff.find(s => s.group === 'B班')?.name || staff[1]?.name || '待定'
+                },
+                assignments
+            };
+        }
+
+        function displaySchedule(schedule, date) {
+            let html = `
+                <div style="margin-bottom: 20px; padding: 15px; background: #f0f0f0; border-radius: 8px;">
+                    <p><strong>日期:</strong> ${date}</p>
+                    <p><strong>类型:</strong> ${schedule.dayType === 'weekend' ? '周末/节假日' : '工作日'}</p>
+                    <p><strong>早班DUTY:</strong> <span class="badge badge-duty">${schedule.morningDuty}</span></p>
+                    <p><strong>晚班DUTY:</strong> <span class="badge badge-duty">${schedule.eveningDuty}</span></p>
+                    <p><strong>早班负责人:</strong> ${schedule.dutyLeaders.morning}</p>
+                    <p><strong>晚班负责人:</strong> ${schedule.dutyLeaders.evening}</p>
+                    <p><strong>饮料机盘点:</strong> <span class="badge badge-inventory">${schedule.inventory.drinks}</span></p>
+                    <p><strong>娃娃机盘点:</strong> <span class="badge badge-inventory">${schedule.inventory.claw}</span></p>
+                </div>
+            `;
+
+            html += '<table>';
+            html += '<thead><tr><th>时间</th><th>岗位/任务</th><th>人员安排</th></tr></thead><tbody>';
+
+            schedule.assignments.forEach(slot => {
+                if (slot.type === 'opening' || slot.type === 'closing') {
+                    slot.tasks.forEach(task => {
+                        html += `<tr>
+                            <td class="time-slot">${slot.time}</td>
+                            <td><span class="badge badge-cleaning">${task.task}</span><br><small>${task.stations.join(', ')}</small></td>
+                            <td>${task.staff.join(', ')}</td>
+                        </tr>`;
+                    });
+                } else {
+                    const assignments = slot.assignments || [];
+                    if (assignments.length > 0) {
+                        html += `<tr>
+                            <td class="time-slot">${slot.time}</td>
+                            <td>岗位值班</td>
+                            <td>${assignments.map(a => `${a.station}: ${a.staff}`).join('<br>')}</td>
+                        </tr>`;
+                    }
+                }
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('scheduleTable').innerHTML = html;
+        }
+
+        function generateShareLink(date, schedule) {
+            const baseUrl = window.location.origin + window.location.pathname;
+            const params = new URLSearchParams({
+                view: 'employee',
+                date: date,
+                data: btoa(JSON.stringify(schedule))
+            });
+            return baseUrl + '?' + params.toString();
+        }
+
+        function copyLink() {
+            const linkInput = document.getElementById('shareLink');
+            linkInput.select();
+            document.execCommand('copy');
+            alert('链接已复制！');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            if (tab === 'manager') {
+                document.getElementById('managerView').classList.remove('hidden');
+                document.getElementById('employeeView').classList.add('hidden');
+            } else {
+                document.getElementById('managerView').classList.add('hidden');
+                document.getElementById('employeeView').classList.remove('hidden');
+            }
+        }
+
+        function populateEmployeeSelect() {
+            const select = document.getElementById('employeeSelect');
+            const allStaff = [];
+            Object.values(staffDB).forEach(group => allStaff.push(...group));
+            
+            select.innerHTML = '<option value="">-- 选择姓名 --</option>' + 
+                [...new Set(allStaff)].sort().map(name => `<option value="${name}">${name}</option>`).join('');
+        }
+
+        function viewMySchedule() {
+            const name = document.getElementById('employeeSelect').value;
+            if (!name) {
+                alert('请选择您的姓名');
+                return;
+            }
+
+            // Get schedule from URL if available
+            const urlParams = new URLSearchParams(window.location.search);
+            const scheduleData = urlParams.get('data');
+            
+            let schedule = null;
+            
+            if (scheduleData) {
+                try {
+                    schedule = JSON.parse(atob(scheduleData));
+                } catch (e) {
+                    console.error('Failed to parse schedule from URL');
+                }
+            }
+            
+            // Fallback to localStorage
+            if (!schedule) {
+                const savedSchedule = localStorage.getItem('currentSchedule');
+                if (savedSchedule) {
+                    schedule = JSON.parse(savedSchedule);
+                }
+            }
+            
+            if (schedule) {
+                displayPersonalSchedule(name, schedule);
+            } else {
+                // Demo schedule with the selected name
+                displayDemoSchedule(name);
+            }
+        }
+        
+        function displayDemoSchedule(name) {
+            document.getElementById('mySchedule').classList.remove('hidden');
+            document.getElementById('myScheduleTitle').textContent = `${name} - ${new Date().toLocaleDateString('zh-CN')} 排班`;
+            
+            // Generate personalized demo based on name
+            const skills = stationSkills[name] || ['机动'];
+            const mainSkill = skills[0];
+            
+            document.getElementById('myScheduleContent').innerHTML = `
+                <div style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 8px;">
+                    <strong>今日岗位专长:</strong> ${skills.join(', ')}
+                </div>
+                <div class="schedule-item">
+                    <div class="schedule-time">9:00-10:00</div>
+                    <div>开档清洁 - ${mainSkill}区域准备</div>
+                </div>
+                <div class="schedule-item">
+                    <div class="schedule-time">10:00-13:30</div>
+                    <div>${mainSkill} 岗位值班</div>
+                </div>
+                <div class="schedule-item" style="border-left-color: #ff9800;">
+                    <div class="schedule-time">13:30-14:30</div>
+                    <div>🍽️ 休息/吃饭时间</div>
+                </div>
+                <div class="schedule-item">
+                    <div class="schedule-time">14:30-18:00</div>
+                    <div>${skills[1] || mainSkill} 岗位值班</div>
+                </div>
+                <div class="schedule-item">
+                    <div class="schedule-time">18:00-22:00</div>
+                    <div>${skills[2] || mainSkill} 岗位值班</div>
+                </div>
+                <div class="schedule-item" style="border-left-color: #f44336;">
+                    <div class="schedule-time">22:00-22:30</div>
+                    <div>闭档清洁 & 设备检查</div>
+                </div>
+            `;
+        }
+
+        function displayPersonalSchedule(name, schedule) {
+            document.getElementById('mySchedule').classList.remove('hidden');
+            document.getElementById('myScheduleTitle').textContent = `${name} - ${schedule.date || new Date().toLocaleDateString('zh-CN')} 排班`;
+            
+            const skills = stationSkills[name] || ['机动'];
+            
+            // Extract personal schedule from full schedule
+            let personalItems = [];
+            
+            schedule.assignments.forEach(slot => {
+                if (slot.type === 'opening' || slot.type === 'closing') {
+                    slot.tasks.forEach(task => {
+                        if (task.staff && task.staff.includes(name)) {
+                            personalItems.push({
+                                time: slot.time,
+                                task: task.task,
+                                detail: task.stations.join(', '),
+                                type: slot.type
+                            });
+                        }
+                    });
+                } else if (slot.assignments) {
+                    const myAssignments = slot.assignments.filter(a => a.staff === name);
+                    myAssignments.forEach(a => {
+                        personalItems.push({
+                            time: slot.time,
+                            task: `${a.station} 岗位值班`,
+                            detail: '',
+                            type: 'main'
+                        });
+                    });
+                }
+            });
+
+            // If no specific assignments found, generate based on skills
+            if (personalItems.length === 0) {
+                displayDemoSchedule(name);
+                return;
+            }
+
+            // Add break time if not present
+            const hasBreak = personalItems.some(item => item.time.includes('13:30') || item.task.includes('吃饭'));
+            if (!hasBreak) {
+                personalItems.push({
+                    time: '13:30-14:30',
+                    task: '🍽️ 休息/吃饭时间',
+                    detail: '',
+                    type: 'break'
+                });
+                // Sort by time
+                personalItems.sort((a, b) => a.time.localeCompare(b.time));
+            }
+
+            const html = personalItems.map(item => {
+                let borderColor = '#667eea';
+                if (item.type === 'break') borderColor = '#ff9800';
+                if (item.type === 'closing') borderColor = '#f44336';
+                if (item.type === 'opening') borderColor = '#4caf50';
+                
+                return `
+                <div class="schedule-item" style="border-left-color: ${borderColor};">
+                    <div class="schedule-time">${item.time}</div>
+                    <div>${item.task}</div>
+                    ${item.detail ? `<small style="color: #666;">${item.detail}</small>` : ''}
+                </div>
+            `;
+            }).join('');
+            
+            document.getElementById('myScheduleContent').innerHTML = html || '<p>今日暂无排班信息</p>';
+        }
+
+        function resetForm() {
+            staffStatus = {};
+            renderStaffGrid();
+            document.getElementById('scheduleResult').classList.add('hidden');
+        }
+
+        // Initialize on load
+        init();
+        
+        // Initialize evening duty options based on default morning duty
+        updateEveningDutyOptions();
+    </script>
+</body>
+</html>
