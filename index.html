@@ -385,9 +385,9 @@
                 throw new Error('没有可用的员工！');
             }
 
-            // Define time slots with properly staggered breaks
+            // Define time slots with group-wide cleaning activities
             const timeSlots = [
-                { time: '9:00-10:00', type: 'opening' },
+                { time: '9:00-10:00', type: 'morning_setup', description: '早班开档清洁&setup (A班全员)' },
                 { time: '10:00-11:00', type: 'normal' },
                 { time: '11:00-12:00', type: 'normal' },
                 { time: '12:00-13:30', type: 'normal' }, // A班工作，B班未开始
@@ -399,7 +399,8 @@
                 { time: '19:00-20:00', type: 'normal' },
                 { time: '20:00-21:00', type: 'normal' },
                 { time: '21:00-22:00', type: 'normal' },
-                { time: '22:00-22:30', type: 'closing' }
+                { time: '22:00-22:30', type: 'evening_cleanup', description: '晚班闭档清洁&takedown (B班全员)' },
+                { time: '22:30-23:00', type: 'final_cleanup', description: '最终清洁收尾 (B班全员)' }
             ];
 
             // Group assignments by shift
@@ -431,7 +432,22 @@
                     
                     // Check if group works this hour
                     if (currentHour >= startHour && currentHour < endHour) {
-                        // Handle staggered breaks - assign specific people to breaks
+                        // Handle group-wide cleaning activities and staggered breaks
+                        if (slot.type === 'morning_setup' && group === 'A班') {
+                            // A班全员参与早班开档清洁 (9-10AM)
+                            availableGroups.push(group);
+                            return;
+                        }
+                        if (slot.type === 'evening_cleanup' && group === 'B班') {
+                            // B班全员参与晚班闭档清洁 (10-10:30PM)
+                            availableGroups.push(group);
+                            return;
+                        }
+                        if (slot.type === 'final_cleanup' && group === 'B班') {
+                            // B班全员参与最终清洁收尾 (10:30-11PM)
+                            availableGroups.push(group);
+                            return;
+                        }
                         if (slot.type === 'lunch_break_A' && group === 'A班') {
                             // A班午餐休息 - 1:30-2:30PM
                             if (breakAssignments.lunch.length === 0) {
@@ -550,11 +566,11 @@
             timeSlots.forEach(slot => {
                 const assignments = shiftAssignments[slot.time] || [];
                 
-                if (slot.type === 'opening') {
+                if (slot.type === 'morning_setup') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
-                    html += '<td><span class="badge badge-cleaning">开档清洁</span><br><small>沙盘赛车,拍照机,MF,派对房</small></td>';
-                    html += '<td>' + assignments.slice(0, 4).map(a => a.staff).join(', ') + '</td>';
-                    html += '<td>' + assignments.slice(0, 4).map(a => a.group).join(', ') + '</td></tr>';
+                    html += '<td><span class="badge badge-cleaning">早班开档清洁&setup</span><br><small>A班全员参与</small></td>';
+                    html += '<td>' + (availableByGroup['A班'] ? availableByGroup['A班'].map(s => s.name).join(', ') : '') + '</td>';
+                    html += '<td>A班</td></tr>';
                 } else if (slot.type === 'lunch_break_A') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
                     html += '<td><span class="badge badge-break">午餐休息</span><br><small>A班休息，B班接管设备</small></td>';
@@ -570,11 +586,16 @@
                     html += '<td><span class="badge badge-break">晚餐休息</span><br><small>C/D/E班部分休息，A/B班覆盖</small></td>';
                     html += '<td>' + assignments.map(a => a.station + ': ' + a.staff).join('<br>') + '</td>';
                     html += '<td>' + [...new Set(assignments.map(a => a.group))].join(', ') + '</td></tr>';
-                } else if (slot.type === 'closing') {
+                } else if (slot.type === 'evening_cleanup') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
-                    html += '<td><span class="badge badge-cleaning">闭档清洁</span><br><small>皮划艇,滑雪机,冲浪板,保龄球</small></td>';
-                    html += '<td>' + assignments.slice(0, 4).map(a => a.staff).join(', ') + '</td>';
-                    html += '<td>' + assignments.slice(0, 4).map(a => a.group).join(', ') + '</td></tr>';
+                    html += '<td><span class="badge badge-cleaning">晚班闭档清洁&takedown</span><br><small>B班全员参与</small></td>';
+                    html += '<td>' + (availableByGroup['B班'] ? availableByGroup['B班'].map(s => s.name).join(', ') : '') + '</td>';
+                    html += '<td>B班</td></tr>';
+                } else if (slot.type === 'final_cleanup') {
+                    html += '<tr><td class="time-slot">' + slot.time + '</td>';
+                    html += '<td><span class="badge badge-cleaning">最终清洁收尾</span><br><small>B班全员参与</small></td>';
+                    html += '<td>' + (availableByGroup['B班'] ? availableByGroup['B班'].map(s => s.name).join(', ') : '') + '</td>';
+                    html += '<td>B班</td></tr>';
                 } else if (assignments.length > 0) {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
                     html += '<td>岗位值班</td>';
@@ -664,7 +685,13 @@
                     html += '<div class="schedule-item">';
                     html += '<div class="schedule-time">' + assignment.time + '</div>';
                     
-                    if (assignment.type === 'opening') {
+                    if (assignment.type === 'morning_setup') {
+                        html += '<div><strong>早班开档清洁&setup</strong><br><small>A班全员参与</small></div>';
+                    } else if (assignment.type === 'evening_cleanup') {
+                        html += '<div><strong>晚班闭档清洁&takedown</strong><br><small>B班全员参与</small></div>';
+                    } else if (assignment.type === 'final_cleanup') {
+                        html += '<div><strong>最终清洁收尾</strong><br><small>B班全员参与</small></div>';
+                    } else if (assignment.type === 'opening') {
                         html += '<div><strong>开档清洁</strong><br><small>沙盘赛车,拍照机,MF,派对房</small></div>';
                     } else if (assignment.type === 'closing') {
                         html += '<div><strong>闭档清洁</strong><br><small>皮划艇,滑雪机,冲浪板,保龄球</small></div>';
