@@ -385,16 +385,16 @@
                 throw new Error('没有可用的员工！');
             }
 
-            // Define time slots with staggered breaks
+            // Define time slots with properly staggered breaks
             const timeSlots = [
                 { time: '9:00-10:00', type: 'opening' },
                 { time: '10:00-11:00', type: 'normal' },
                 { time: '11:00-12:00', type: 'normal' },
-                { time: '12:00-13:30', type: 'lunch_break_A', description: '午餐休息 (A班)' },
-                { time: '13:30-14:30', type: 'normal' },
+                { time: '12:00-13:30', type: 'normal' }, // A班工作，B班未开始
+                { time: '13:30-14:30', type: 'lunch_break_A', description: '午餐休息 (A班 1:30-2:30PM)' },
                 { time: '14:30-16:00', type: 'normal' },
-                { time: '16:00-17:00', type: 'dinner_break_B1', description: '晚餐休息 (B班第一批)' },
-                { time: '17:00-18:00', type: 'dinner_break_CDE', description: '晚餐休息 (C/D/E班)' },
+                { time: '16:00-17:00', type: 'dinner_break_B', description: '晚餐休息 (B班 4-5PM)' },
+                { time: '17:00-18:00', type: 'dinner_break_C', description: '晚餐休息 (C班 5-6PM)' },
                 { time: '18:00-19:00', type: 'normal' },
                 { time: '19:00-20:00', type: 'normal' },
                 { time: '20:00-21:00', type: 'normal' },
@@ -406,6 +406,15 @@
             const shiftAssignments = {};
             const detailedAssignments = {};
 
+            // Track who takes which break to ensure one break per person
+            const breakAssignments = {
+                lunch: [], // A班 lunch break
+                dinner_B: [], // B班 dinner break  
+                dinner_C: [], // C班 dinner break
+                dinner_D: [], // D班 dinner break
+                dinner_E: []  // E班 dinner break
+            };
+
             // Assign staff to time slots based on their group with staggered breaks
             timeSlots.forEach(slot => {
                 const slotAssignments = [];
@@ -413,6 +422,7 @@
                 // Determine which groups should work this slot (considering staggered breaks)
                 const availableGroups = [];
                 const onBreakGroups = [];
+                const coveringStaff = []; // Track who is covering during breaks
                 
                 Object.keys(availableByGroup).forEach(group => {
                     const groupInfo = shiftGroups[group];
@@ -421,22 +431,60 @@
                     
                     // Check if group works this hour
                     if (currentHour >= startHour && currentHour < endHour) {
-                        // Handle staggered breaks
+                        // Handle staggered breaks - assign specific people to breaks
                         if (slot.type === 'lunch_break_A' && group === 'A班') {
-                            onBreakGroups.push(group); // A班午餐休息
+                            // A班午餐休息 - 1:30-2:30PM
+                            if (breakAssignments.lunch.length === 0) {
+                                // Assign A班人员 to lunch break (first batch)
+                                const lunchTakers = availableByGroup['A班'].slice(0, Math.ceil(availableByGroup['A班'].length / 2));
+                                breakAssignments.lunch = lunchTakers.map(p => p.name);
+                            }
+                            onBreakGroups.push({group: group, breakType: 'lunch', people: breakAssignments.lunch});
                             return;
                         }
-                        if (slot.type === 'dinner_break_B1' && (group === 'B班' || group === 'C班')) {
-                            onBreakGroups.push(group); // B/C班第一批晚餐休息
+                        if (slot.type === 'dinner_break_B' && group === 'B班') {
+                            // B班晚餐休息 - 4-5PM
+                            if (breakAssignments.dinner_B.length === 0) {
+                                breakAssignments.dinner_B = availableByGroup['B班'].map(p => p.name);
+                            }
+                            onBreakGroups.push({group: group, breakType: 'dinner_B', people: breakAssignments.dinner_B});
                             return;
                         }
-                        if (slot.type === 'dinner_break_CDE' && (group === 'D班' || group === 'E班' || group === 'B班')) {
-                            onBreakGroups.push(group); // D/E班 + B班第二批晚餐休息
+                        if (slot.type === 'dinner_break_C' && group === 'C班') {
+                            // C班晚餐休息 - 5-6PM  
+                            if (breakAssignments.dinner_C.length === 0) {
+                                breakAssignments.dinner_C = availableByGroup['C班'].map(p => p.name);
+                            }
+                            onBreakGroups.push({group: group, breakType: 'dinner_C', people: breakAssignments.dinner_C});
                             return;
                         }
                         availableGroups.push(group);
                     }
                 });
+
+                // For D班 and E班, assign dinner breaks to specific individuals, not whole groups
+                if (slot.type === 'dinner_break_B' || slot.type === 'dinner_break_C') {
+                    // Find people who haven't taken lunch break yet for dinner breaks
+                    const availableForDinner = [];
+                    ['D班', 'E班'].forEach(group => {
+                        if (availableByGroup[group]) {
+                            availableByGroup[group].forEach(person => {
+                                // Only assign to dinner if they haven't taken lunch
+                                if (!breakAssignments.lunch.includes(person.name)) {
+                                    if (slot.type === 'dinner_break_B' && breakAssignments.dinner_D.length < Math.ceil(availableByGroup['D班'].length / 2)) {
+                                        if (!breakAssignments.dinner_D.includes(person.name)) {
+                                            breakAssignments.dinner_D.push(person.name);
+                                        }
+                                    } else if (slot.type === 'dinner_break_C' && breakAssignments.dinner_E.length < Math.ceil(availableByGroup['E班'].length / 2)) {
+                                        if (!breakAssignments.dinner_E.includes(person.name)) {
+                                            breakAssignments.dinner_E.push(person.name);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
 
                 // Assign stations to available staff (ensuring coverage during breaks)
                 const availableStaff = availableGroups.flatMap(group => availableByGroup[group]);
@@ -449,28 +497,39 @@
                         
                         // Store detailed assignment
                         if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
-                        detailedAssignments[person.name].push({
-                            time: slot.time,
-                            type: slot.type,
-                            station: station,
-                            group: person.group,
-                            onBreak: false
-                        });
+                        
+                        // Avoid duplicates by checking if this time slot already exists
+                        const existingAssignment = detailedAssignments[person.name].find(a => a.time === slot.time);
+                        if (!existingAssignment) {
+                            detailedAssignments[person.name].push({
+                                time: slot.time,
+                                type: slot.type,
+                                station: station,
+                                group: person.group,
+                                onBreak: false
+                            });
+                        }
                     }
                 });
 
-                // Mark break assignments for personal view
-                onBreakGroups.forEach(group => {
-                    availableByGroup[group].forEach(person => {
-                        if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
-                        detailedAssignments[person.name].push({
-                            time: slot.time,
-                            type: slot.type,
-                            station: null,
-                            group: person.group,
-                            onBreak: true,
-                            breakDescription: slot.description || '休息时间'
-                        });
+                // Mark break assignments for personal view with detailed info
+                onBreakGroups.forEach(breakInfo => {
+                    breakInfo.people.forEach(personName => {
+                        if (!detailedAssignments[personName]) detailedAssignments[personName] = [];
+                        
+                        // Avoid duplicates
+                        const existingBreak = detailedAssignments[personName].find(a => a.time === slot.time && a.onBreak);
+                        if (!existingBreak) {
+                            detailedAssignments[personName].push({
+                                time: slot.time,
+                                type: slot.type,
+                                station: null,
+                                group: breakInfo.group,
+                                onBreak: true,
+                                breakDescription: slot.description || '休息时间',
+                                coveringGroups: availableGroups.join(', ') // Show who is covering
+                            });
+                        }
                     });
                 });
 
@@ -498,16 +557,19 @@
                     html += '<td>' + assignments.slice(0, 4).map(a => a.group).join(', ') + '</td></tr>';
                 } else if (slot.type === 'lunch_break_A') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
-                    html += '<td><span class="badge badge-break">午餐休息</span><br><small>A班员工休息，B班接管</small></td>';
-                    html += '<td>-</td><td>-</td></tr>';
-                } else if (slot.type === 'dinner_break_B1') {
+                    html += '<td><span class="badge badge-break">午餐休息</span><br><small>A班休息，B班接管设备</small></td>';
+                    html += '<td>' + assignments.map(a => a.station + ': ' + a.staff).join('<br>') + '</td>';
+                    html += '<td>' + [...new Set(assignments.map(a => a.group))].join(', ') + '</td></tr>';
+                } else if (slot.type === 'dinner_break_B') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
-                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>B/C班第一批休息，A班覆盖</small></td>';
-                    html += '<td>-</td><td>-</td></tr>';
-                } else if (slot.type === 'dinner_break_CDE') {
+                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>B班休息，A/C/D/E班覆盖</small></td>';
+                    html += '<td>' + assignments.map(a => a.station + ': ' + a.staff).join('<br>') + '</td>';
+                    html += '<td>' + [...new Set(assignments.map(a => a.group))].join(', ') + '</td></tr>';
+                } else if (slot.type === 'dinner_break_C') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
-                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>D/E班+B班第二批休息，A班覆盖</small></td>';
-                    html += '<td>-</td><td>-</td></tr>';
+                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>C/D/E班部分休息，A/B班覆盖</small></td>';
+                    html += '<td>' + assignments.map(a => a.station + ': ' + a.staff).join('<br>') + '</td>';
+                    html += '<td>' + [...new Set(assignments.map(a => a.group))].join(', ') + '</td></tr>';
                 } else if (slot.type === 'closing') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
                     html += '<td><span class="badge badge-cleaning">闭档清洁</span><br><small>皮划艇,滑雪机,冲浪板,保龄球</small></td>';
@@ -532,7 +594,7 @@
                            availableByGroup[group].map(s => s.name).join(', ') + '</p>';
                 }
             });
-            html += '<p><strong>💡 休息安排:</strong> A班12-1:30PM午餐，B/C班4-5PM晚餐，D/E/B班5-6PM晚餐</p>';
+            html += '<p><strong>💡 休息安排:</strong> A班1:30-2:30PM午餐，B班4-5PM晚餐，C班5-6PM晚餐，D/E班分批晚餐</p>';
             html += '</div>';
             
             // Share link
