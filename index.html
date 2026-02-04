@@ -369,6 +369,9 @@
             const stations = ['OMNI', 'MF', 'DBOX', '沙盘赛车', '翼装飞行', '保龄球', 
                              '飞镖', '射击', '射箭', '滑雪机', '皮划艇', '冲浪板', '主机', '手作'];
             
+            // Store detailed assignments for personal view
+            const detailedAssignments = {};
+            
             let html = '<div class="card"><h2>📋 排班表 - ' + date + '</h2>';
             html += '<p><strong>类型:</strong> ' + (dayType === 'weekend' ? '周末/节假日' : '工作日') + ' | ';
             html += '<strong>早班DUTY:</strong> <span class="badge badge-duty">' + morningDuty + '</span> | ';
@@ -379,14 +382,20 @@
             html += '<table><thead><tr><th>时间</th><th>任务/岗位</th><th>人员</th></tr></thead><tbody>';
             
             // Opening
+            const openingStaff = staff.slice(0, 3).map(s => s.name);
+            openingStaff.forEach(name => {
+                detailedAssignments[name + '_9:00-10:00'] = {time: '9:00-10:00', task: '开档清洁', stations: '沙盘赛车,拍照机,MF,派对房'};
+            });
             html += '<tr><td class="time-slot">9:00-10:00</td>';
             html += '<td><span class="badge badge-cleaning">开档清洁</span><br>沙盘赛车,拍照机,MF,派对房</td>';
-            html += '<td>' + staff.slice(0, 3).map(s => s.name).join(', ') + '</td></tr>';
+            html += '<td>' + openingStaff.join(', ') + '</td></tr>';
             
             // Main shifts
+            const timeAssignments = {};
             for (let i = 1; i < times.length - 1; i++) {
                 const time = times[i];
                 let assigned = [];
+                timeAssignments[time] = [];
                 
                 // Assign based on skills
                 stations.forEach((station, idx) => {
@@ -395,6 +404,16 @@
                         const person = qualified[idx % qualified.length];
                         if (!assigned.find(a => a.staff === person.name)) {
                             assigned.push({station, staff: person.name});
+                            
+                            // Store detailed assignment
+                            if (!detailedAssignments[person.name + '_' + time]) {
+                                detailedAssignments[person.name + '_' + time] = {
+                                    time: time,
+                                    stations: []
+                                };
+                            }
+                            detailedAssignments[person.name + '_' + time].stations.push(station);
+                            timeAssignments[time].push({station, staff: person.name});
                         }
                     }
                 });
@@ -407,9 +426,13 @@
             }
             
             // Closing
+            const closingStaff = staff.slice(0, 3).map(s => s.name);
+            closingStaff.forEach(name => {
+                detailedAssignments[name + '_22:00-22:30'] = {time: '22:00-22:30', task: '闭档清洁', stations: '皮划艇,滑雪机,冲浪板,保龄球'};
+            });
             html += '<tr><td class="time-slot">22:00-22:30</td>';
             html += '<td><span class="badge badge-cleaning">闭档清洁</span><br>皮划艇,滑雪机,冲浪板,保龄球</td>';
-            html += '<td>' + staff.slice(0, 3).map(s => s.name).join(', ') + '</td></tr>';
+            html += '<td>' + closingStaff.join(', ') + '</td></tr>';
             
             html += '</tbody></table>';
             
@@ -420,7 +443,15 @@
             html += '<input type="text" value="' + window.location.href + '?view=employee&date=' + date + '" readonly onclick="this.select()">';
             html += '</div></div>';
             
-            return {date, dayType, morningDuty, eveningDuty, staff: staff.map(s => s.name), html};
+            return {
+                date, 
+                dayType, 
+                morningDuty, 
+                eveningDuty, 
+                staff: staff.map(s => s.name), 
+                html,
+                detailedAssignments
+            };
         }
 
         function displaySchedule(schedule) {
@@ -461,15 +492,50 @@
                 return;
             }
             
-            // Generate personal view
+            // Generate personal view with specific stations
             let html = '<div style="margin-top:30px;text-align:left;">';
             html += '<h3>' + name + ' - ' + date + ' 排班</h3>';
-            html += '<div class="schedule-item"><div class="schedule-time">9:00-10:00</div><div>开档清洁</div></div>';
-            html += '<div class="schedule-item"><div class="schedule-time">10:00-13:30</div><div>岗位值班</div></div>';
-            html += '<div class="schedule-item"><div class="schedule-time">13:30-14:30</div><div>休息/吃饭</div></div>';
-            html += '<div class="schedule-item"><div class="schedule-time">14:30-18:00</div><div>岗位值班</div></div>';
-            html += '<div class="schedule-item"><div class="schedule-time">18:00-22:00</div><div>岗位值班</div></div>';
-            html += '<div class="schedule-item"><div class="schedule-time">22:00-22:30</div><div>闭档清洁</div></div>';
+            
+            // Check for detailed assignments
+            if (schedule.detailedAssignments) {
+                const times = ['9:00-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:30', 
+                              '13:30-14:30', '14:30-16:00', '16:00-17:00', '17:00-18:00',
+                              '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00', '22:00-22:30'];
+                
+                times.forEach(time => {
+                    const assignment = schedule.detailedAssignments[name + '_' + time];
+                    if (assignment) {
+                        if (assignment.task) {
+                            // Special tasks like opening/closing
+                            html += '<div class="schedule-item">';
+                            html += '<div class="schedule-time">' + time + '</div>';
+                            html += '<div><strong>' + assignment.task + '</strong><br><small>' + assignment.stations + '</small></div>';
+                            html += '</div>';
+                        } else if (assignment.stations && assignment.stations.length > 0) {
+                            // Station assignments
+                            html += '<div class="schedule-item">';
+                            html += '<div class="schedule-time">' + time + '</div>';
+                            html += '<div><strong>岗位值班</strong><br><small>' + assignment.stations.join(', ') + '</small></div>';
+                            html += '</div>';
+                        }
+                    } else if (time === '12:00-13:30' || time === '13:30-14:30') {
+                        // Lunch break
+                        html += '<div class="schedule-item">';
+                        html += '<div class="schedule-time">' + time + '</div>';
+                        html += '<div><strong>休息/吃饭</strong></div>';
+                        html += '</div>';
+                    }
+                });
+            } else {
+                // Fallback to generic view if no detailed assignments
+                html += '<div class="schedule-item"><div class="schedule-time">9:00-10:00</div><div>开档清洁</div></div>';
+                html += '<div class="schedule-item"><div class="schedule-time">10:00-13:30</div><div>岗位值班</div></div>';
+                html += '<div class="schedule-item"><div class="schedule-time">13:30-14:30</div><div>休息/吃饭</div></div>';
+                html += '<div class="schedule-item"><div class="schedule-time">14:30-18:00</div><div>岗位值班</div></div>';
+                html += '<div class="schedule-item"><div class="schedule-time">18:00-22:00</div><div>岗位值班</div></div>';
+                html += '<div class="schedule-item"><div class="schedule-time">22:00-22:30</div><div>闭档清洁</div></div>';
+            }
+            
             html += '</div>';
             
             document.getElementById('personalSchedule').innerHTML = html;
