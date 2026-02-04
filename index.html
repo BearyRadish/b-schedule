@@ -502,31 +502,76 @@
                     });
                 }
 
-                // Assign stations to available staff (ensuring coverage during breaks)
-                const availableStaff = availableGroups.flatMap(group => availableByGroup[group]);
-                
-                stations.forEach((station, stationIdx) => {
-                    const qualified = availableStaff.filter(s => s.skills && s.skills.includes(station));
-                    if (qualified.length > 0) {
-                        const person = qualified[stationIdx % qualified.length];
-                        slotAssignments.push({station, staff: person.name, group: person.group});
+                // Handle group-wide activities vs individual station assignments
+                if (slot.type === 'morning_setup' && availableGroups.includes('A班')) {
+                    // A班全员参与 - group activity, no individual station assignments
+                    availableByGroup['A班'].forEach(person => {
+                        slotAssignments.push({station: 'group_setup', staff: person.name, group: 'A班'});
                         
-                        // Store detailed assignment
                         if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
+                        detailedAssignments[person.name].push({
+                            time: slot.time,
+                            type: slot.type,
+                            station: 'group_setup',
+                            group: 'A班',
+                            onBreak: false
+                        });
+                    });
+                } else if (slot.type === 'evening_cleanup' && availableGroups.includes('B班')) {
+                    // B班全员参与 - group activity, no individual station assignments
+                    availableByGroup['B班'].forEach(person => {
+                        slotAssignments.push({station: 'group_cleanup', staff: person.name, group: 'B班'});
                         
-                        // Avoid duplicates by checking if this time slot already exists
-                        const existingAssignment = detailedAssignments[person.name].find(a => a.time === slot.time);
-                        if (!existingAssignment) {
-                            detailedAssignments[person.name].push({
-                                time: slot.time,
-                                type: slot.type,
-                                station: station,
-                                group: person.group,
-                                onBreak: false
-                            });
+                        if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
+                        detailedAssignments[person.name].push({
+                            time: slot.time,
+                            type: slot.type,
+                            station: 'group_cleanup',
+                            group: 'B班',
+                            onBreak: false
+                        });
+                    });
+                } else if (slot.type === 'final_cleanup' && availableGroups.includes('B班')) {
+                    // B班全员参与 - final cleanup, no individual station assignments
+                    availableByGroup['B班'].forEach(person => {
+                        slotAssignments.push({station: 'final_cleanup', staff: person.name, group: 'B班'});
+                        
+                        if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
+                        detailedAssignments[person.name].push({
+                            time: slot.time,
+                            type: slot.type,
+                            station: 'final_cleanup',
+                            group: 'B班',
+                            onBreak: false
+                        });
+                    });
+                } else {
+                    // Normal station assignments for other time slots
+                    const availableStaff = availableGroups.flatMap(group => availableByGroup[group]);
+                    
+                    stations.forEach((station, stationIdx) => {
+                        const qualified = availableStaff.filter(s => s.skills && s.skills.includes(station));
+                        if (qualified.length > 0) {
+                            const person = qualified[stationIdx % qualified.length];
+                            slotAssignments.push({station, staff: person.name, group: person.group});
+                            
+                            // Store detailed assignment
+                            if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
+                            
+                            // Avoid duplicates by checking if this time slot already exists
+                            const existingAssignment = detailedAssignments[person.name].find(a => a.time === slot.time);
+                            if (!existingAssignment) {
+                                detailedAssignments[person.name].push({
+                                    time: slot.time,
+                                    type: slot.type,
+                                    station: station,
+                                    group: person.group,
+                                    onBreak: false
+                                });
+                            }
                         }
-                    }
-                });
+                    });
+                }
 
                 // Mark break assignments for personal view with detailed info
                 onBreakGroups.forEach(breakInfo => {
@@ -569,7 +614,8 @@
                 if (slot.type === 'morning_setup') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
                     html += '<td><span class="badge badge-cleaning">早班开档清洁&setup</span><br><small>A班全员参与</small></td>';
-                    html += '<td>' + (availableByGroup['A班'] ? availableByGroup['A班'].map(s => s.name).join(', ') : '') + '</td>';
+                    const a班Members = availableByGroup['A班'] ? availableByGroup['A班'].map(s => s.name) : [];
+                    html += '<td>' + a班Members.join(', ') + '</td>';
                     html += '<td>A班</td></tr>';
                 } else if (slot.type === 'lunch_break_A') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
@@ -589,12 +635,14 @@
                 } else if (slot.type === 'evening_cleanup') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
                     html += '<td><span class="badge badge-cleaning">晚班闭档清洁&takedown</span><br><small>B班全员参与</small></td>';
-                    html += '<td>' + (availableByGroup['B班'] ? availableByGroup['B班'].map(s => s.name).join(', ') : '') + '</td>';
+                    const b班Members = availableByGroup['B班'] ? availableByGroup['B班'].map(s => s.name) : [];
+                    html += '<td>' + b班Members.join(', ') + '</td>';
                     html += '<td>B班</td></tr>';
                 } else if (slot.type === 'final_cleanup') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
                     html += '<td><span class="badge badge-cleaning">最终清洁收尾</span><br><small>B班全员参与</small></td>';
-                    html += '<td>' + (availableByGroup['B班'] ? availableByGroup['B班'].map(s => s.name).join(', ') : '') + '</td>';
+                    const b班Members = availableByGroup['B班'] ? availableByGroup['B班'].map(s => s.name) : [];
+                    html += '<td>' + b班Members.join(', ') + '</td>';
                     html += '<td>B班</td></tr>';
                 } else if (assignments.length > 0) {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
