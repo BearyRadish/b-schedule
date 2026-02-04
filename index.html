@@ -385,16 +385,16 @@
                 throw new Error('没有可用的员工！');
             }
 
-            // Define time slots with breaks
+            // Define time slots with staggered breaks
             const timeSlots = [
                 { time: '9:00-10:00', type: 'opening' },
                 { time: '10:00-11:00', type: 'normal' },
                 { time: '11:00-12:00', type: 'normal' },
-                { time: '12:00-13:30', type: 'lunch_break' },
+                { time: '12:00-13:30', type: 'lunch_break_A', description: '午餐休息 (A班)' },
                 { time: '13:30-14:30', type: 'normal' },
                 { time: '14:30-16:00', type: 'normal' },
-                { time: '16:00-17:00', type: 'dinner_break_start' },
-                { time: '17:00-18:00', type: 'dinner_break_end' },
+                { time: '16:00-17:00', type: 'dinner_break_B1', description: '晚餐休息 (B班第一批)' },
+                { time: '17:00-18:00', type: 'dinner_break_CDE', description: '晚餐休息 (C/D/E班)' },
                 { time: '18:00-19:00', type: 'normal' },
                 { time: '19:00-20:00', type: 'normal' },
                 { time: '20:00-21:00', type: 'normal' },
@@ -406,12 +406,14 @@
             const shiftAssignments = {};
             const detailedAssignments = {};
 
-            // Assign staff to time slots based on their group
+            // Assign staff to time slots based on their group with staggered breaks
             timeSlots.forEach(slot => {
                 const slotAssignments = [];
                 
-                // Determine which groups should work this slot
+                // Determine which groups should work this slot (considering staggered breaks)
                 const availableGroups = [];
+                const onBreakGroups = [];
+                
                 Object.keys(availableByGroup).forEach(group => {
                     const groupInfo = shiftGroups[group];
                     const [startHour, endHour] = groupInfo.hours.split('-').map(t => parseInt(t));
@@ -419,20 +421,24 @@
                     
                     // Check if group works this hour
                     if (currentHour >= startHour && currentHour < endHour) {
-                        // Handle breaks
-                        if (slot.type === 'lunch_break' && startHour < 13) {
-                            // Morning shift gets lunch break
+                        // Handle staggered breaks
+                        if (slot.type === 'lunch_break_A' && group === 'A班') {
+                            onBreakGroups.push(group); // A班午餐休息
                             return;
                         }
-                        if ((slot.type === 'dinner_break_start' || slot.type === 'dinner_break_end') && startHour >= 13) {
-                            // Evening shift gets dinner break
+                        if (slot.type === 'dinner_break_B1' && (group === 'B班' || group === 'C班')) {
+                            onBreakGroups.push(group); // B/C班第一批晚餐休息
+                            return;
+                        }
+                        if (slot.type === 'dinner_break_CDE' && (group === 'D班' || group === 'E班' || group === 'B班')) {
+                            onBreakGroups.push(group); // D/E班 + B班第二批晚餐休息
                             return;
                         }
                         availableGroups.push(group);
                     }
                 });
 
-                // Assign stations to available staff
+                // Assign stations to available staff (ensuring coverage during breaks)
                 const availableStaff = availableGroups.flatMap(group => availableByGroup[group]);
                 
                 stations.forEach((station, stationIdx) => {
@@ -447,9 +453,25 @@
                             time: slot.time,
                             type: slot.type,
                             station: station,
-                            group: person.group
+                            group: person.group,
+                            onBreak: false
                         });
                     }
+                });
+
+                // Mark break assignments for personal view
+                onBreakGroups.forEach(group => {
+                    availableByGroup[group].forEach(person => {
+                        if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
+                        detailedAssignments[person.name].push({
+                            time: slot.time,
+                            type: slot.type,
+                            station: null,
+                            group: person.group,
+                            onBreak: true,
+                            breakDescription: slot.description || '休息时间'
+                        });
+                    });
                 });
 
                 shiftAssignments[slot.time] = slotAssignments;
@@ -474,13 +496,17 @@
                     html += '<td><span class="badge badge-cleaning">开档清洁</span><br><small>沙盘赛车,拍照机,MF,派对房</small></td>';
                     html += '<td>' + assignments.slice(0, 4).map(a => a.staff).join(', ') + '</td>';
                     html += '<td>' + assignments.slice(0, 4).map(a => a.group).join(', ') + '</td></tr>';
-                } else if (slot.type === 'lunch_break') {
+                } else if (slot.type === 'lunch_break_A') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
-                    html += '<td><span class="badge badge-break">午餐休息</span><br><small>早班员工休息</small></td>';
+                    html += '<td><span class="badge badge-break">午餐休息</span><br><small>A班员工休息，B班接管</small></td>';
                     html += '<td>-</td><td>-</td></tr>';
-                } else if (slot.type.includes('dinner_break')) {
+                } else if (slot.type === 'dinner_break_B1') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
-                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>晚班员工休息</small></td>';
+                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>B/C班第一批休息，A班覆盖</small></td>';
+                    html += '<td>-</td><td>-</td></tr>';
+                } else if (slot.type === 'dinner_break_CDE') {
+                    html += '<tr><td class="time-slot">' + slot.time + '</td>';
+                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>D/E班+B班第二批休息，A班覆盖</small></td>';
                     html += '<td>-</td><td>-</td></tr>';
                 } else if (slot.type === 'closing') {
                     html += '<tr><td class="time-slot">' + slot.time + '</td>';
@@ -506,6 +532,7 @@
                            availableByGroup[group].map(s => s.name).join(', ') + '</p>';
                 }
             });
+            html += '<p><strong>💡 休息安排:</strong> A班12-1:30PM午餐，B/C班4-5PM晚餐，D/E/B班5-6PM晚餐</p>';
             html += '</div>';
             
             // Share link
@@ -565,7 +592,7 @@
                 return;
             }
             
-            // Generate personal view with detailed schedule
+            // Generate personal view with detailed schedule including staggered breaks
             let html = '<div style="margin-top:30px;text-align:left;">';
             html += '<h3>' + name + ' - ' + date + ' 排班</h3>';
             
@@ -579,11 +606,11 @@
                         html += '<div><strong>开档清洁</strong><br><small>沙盘赛车,拍照机,MF,派对房</small></div>';
                     } else if (assignment.type === 'closing') {
                         html += '<div><strong>闭档清洁</strong><br><small>皮划艇,滑雪机,冲浪板,保龄球</small></div>';
-                    } else if (assignment.type === 'lunch_break') {
-                        html += '<div><strong>午餐休息</strong><br><small>休息时间</small></div>';
-                    } else if (assignment.type.includes('dinner_break')) {
-                        html += '<div><strong>晚餐休息</strong><br><small>休息时间</small></div>';
-                    } else {
+                    } else if (assignment.onBreak) {
+                        // Show break with description
+                        html += '<div><strong>' + assignment.breakDescription + '</strong><br><small>休息时间</small></div>';
+                    } else if (assignment.type.includes('normal')) {
+                        // Regular station assignment
                         html += '<div><strong>岗位值班</strong><br><small>' + assignment.station + '</small></div>';
                     }
                     
