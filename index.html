@@ -109,6 +109,8 @@
         .badge-duty { background: #e3f2fd; color: #1976d2; }
         .badge-cleaning { background: #e8f5e9; color: #388e3c; }
         .badge-inventory { background: #f3e5f5; color: #7b1fa2; }
+        .badge-break { background: #fff3e0; color: #f57c00; }
+        .badge-parttime { color: #666; font-style: italic; }
         #scheduleOutput { margin-top: 30px; }
         .share-box {
             background: #f0f0f0;
@@ -146,6 +148,18 @@
             border-left: 4px solid #667eea;
         }
         .schedule-time { font-weight: 600; color: #667eea; }
+        .shift-group-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #1976d2;
+        }
+        .station-list {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -179,15 +193,15 @@
 
             <div class="card">
                 <h2>👥 人员状态 (点击切换：正常 → 病假 → 休假)</h2>
-                <h4 style="margin-top:15px;">A班</h4>
+                <h4 style="margin-top:15px;">A班 (全职)</h4>
                 <div class="staff-grid" id="groupA"></div>
-                <h4 style="margin-top:15px;">B班</h4>
+                <h4 style="margin-top:15px;">B班 (全职)</h4>
                 <div class="staff-grid" id="groupB"></div>
-                <h4 style="margin-top:15px;">C班</h4>
+                <h4 style="margin-top:15px;">C班 (兼职)</h4>
                 <div class="staff-grid" id="groupC"></div>
-                <h4 style="margin-top:15px;">D班</h4>
+                <h4 style="margin-top:15px;">D班 (兼职)</h4>
                 <div class="staff-grid" id="groupD"></div>
-                <h4 style="margin-top:15px;">E班</h4>
+                <h4 style="margin-top:15px;">E班 (兼职)</h4>
                 <div class="staff-grid" id="groupE"></div>
             </div>
 
@@ -235,13 +249,21 @@
     </div>
 
     <script>
-        // Data
+        // Data - Updated with shift groups and part-time indicators
         const staffDB = {
             'A班': ['张一明', '王斌夏', '张程俊', '张乃芝', '杨旺', '陈泽宏', '于琪', '涂丽玲'],
             'B班': ['虞稳彬', '张康', '李嘉欣', '郭嘉诚', '杜震', '罗晓燕', '沈明羽'],
             'C班': ['王峰', '陈珍', '周腾飞', '沈思辰', '张一鸣'],
             'D班': ['甘澍', '龚儒馨', '朱盛祺', '高瑞昂', '李佳霖', '姚静宜', '洪瑾', '张思彤'],
             'E班': ['梁景焱', '盛家贺', '吕淼', '赵思涵', '于浩然']
+        };
+
+        const shiftGroups = {
+            'A班': { hours: '9:00-18:00', type: 'fulltime' },
+            'B班': { hours: '13:30-22:30', type: 'fulltime' },
+            'C班': { hours: '10:00-19:00', type: 'parttime' },
+            'D班': { hours: '11:00-20:00', type: 'parttime' },
+            'E班': { hours: '12:00-21:00', type: 'parttime' }
         };
 
         const skills = {
@@ -261,6 +283,9 @@
             '金越': ['机动']
         };
 
+        const stations = ['OMNI', 'MF', 'DBOX', '沙盘赛车', '翼装飞行', '保龄球', 
+                         '飞镖', '射击', '射箭', '滑雪机', '皮划艇', '冲浪板', '主机', '手作'];
+
         let staffStatus = {};
         let currentSchedule = null;
 
@@ -277,7 +302,7 @@
                 container.innerHTML = staffDB[group].map(name => `
                     <div class="staff-item selected" data-name="${name}" onclick="toggleStatus('${name}')">
                         <input type="checkbox" checked>
-                        <label>${name}</label>
+                        <label>${name} ${shiftGroups[group].type === 'parttime' ? '<span class="badge-parttime">(兼)</span>' : ''}</label>
                     </div>
                 `).join('');
             });
@@ -331,23 +356,16 @@
                     return;
                 }
 
-                // Get available staff
-                const available = [];
-                Object.keys(staffDB).forEach(g => {
-                    staffDB[g].forEach(name => {
-                        if (staffStatus[name] !== 'sick' && staffStatus[name] !== 'vacation') {
-                            available.push({name, group: g, skills: skills[name] || ['机动']});
-                        }
-                    });
+                // Get available staff by group
+                const availableByGroup = {};
+                Object.keys(staffDB).forEach(group => {
+                    availableByGroup[group] = staffDB[group]
+                        .filter(name => staffStatus[name] !== 'sick' && staffStatus[name] !== 'vacation')
+                        .map(name => ({name, group, skills: skills[name] || ['机动']}));
                 });
 
-                if (available.length === 0) {
-                    alert('没有可用的员工！');
-                    return;
-                }
-
-                // Generate schedule
-                currentSchedule = buildSchedule(available, dayType, morningDuty, eveningDuty, date);
+                // Generate schedule with proper shift groups and breaks
+                currentSchedule = buildAdvancedSchedule(availableByGroup, dayType, morningDuty, eveningDuty, date);
                 
                 // Display
                 displaySchedule(currentSchedule);
@@ -361,80 +379,134 @@
             }
         }
 
-        function buildSchedule(staff, dayType, morningDuty, eveningDuty, date) {
-            const times = ['9:00-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:30', 
-                          '13:30-14:30', '14:30-16:00', '16:00-17:00', '17:00-18:00',
-                          '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00', '22:00-22:30'];
-            
-            const stations = ['OMNI', 'MF', 'DBOX', '沙盘赛车', '翼装飞行', '保龄球', 
-                             '飞镖', '射击', '射箭', '滑雪机', '皮划艇', '冲浪板', '主机', '手作'];
-            
-            // Store detailed assignments for personal view
+        function buildAdvancedSchedule(availableByGroup, dayType, morningDuty, eveningDuty, date) {
+            const allStaff = Object.values(availableByGroup).flat();
+            if (allStaff.length === 0) {
+                throw new Error('没有可用的员工！');
+            }
+
+            // Define time slots with breaks
+            const timeSlots = [
+                { time: '9:00-10:00', type: 'opening' },
+                { time: '10:00-11:00', type: 'normal' },
+                { time: '11:00-12:00', type: 'normal' },
+                { time: '12:00-13:30', type: 'lunch_break' },
+                { time: '13:30-14:30', type: 'normal' },
+                { time: '14:30-16:00', type: 'normal' },
+                { time: '16:00-17:00', type: 'dinner_break_start' },
+                { time: '17:00-18:00', type: 'dinner_break_end' },
+                { time: '18:00-19:00', type: 'normal' },
+                { time: '19:00-20:00', type: 'normal' },
+                { time: '20:00-21:00', type: 'normal' },
+                { time: '21:00-22:00', type: 'normal' },
+                { time: '22:00-22:30', type: 'closing' }
+            ];
+
+            // Group assignments by shift
+            const shiftAssignments = {};
             const detailedAssignments = {};
-            
-            let html = '<div class="card"><h2>📋 排班表 - ' + date + '</h2>';
-            html += '<p><strong>类型:</strong> ' + (dayType === 'weekend' ? '周末/节假日' : '工作日') + ' | ';
-            html += '<strong>早班DUTY:</strong> <span class="badge badge-duty">' + morningDuty + '</span> | ';
-            html += '<strong>晚班DUTY:</strong> <span class="badge badge-duty">' + eveningDuty + '</span></p>';
-            html += '<p><strong>早班负责人:</strong> 金越 | <strong>晚班负责人:</strong> 张诗晗</p>';
-            html += '<p><strong>饮料机盘点:</strong> ' + staff[0].name + ' | <strong>娃娃机盘点:</strong> ' + (staff[1]?.name || staff[0].name) + '</p>';
-            
-            html += '<table><thead><tr><th>时间</th><th>任务/岗位</th><th>人员</th></tr></thead><tbody>';
-            
-            // Opening
-            const openingStaff = staff.slice(0, 3).map(s => s.name);
-            openingStaff.forEach(name => {
-                detailedAssignments[name + '_9:00-10:00'] = {time: '9:00-10:00', task: '开档清洁', stations: '沙盘赛车,拍照机,MF,派对房'};
-            });
-            html += '<tr><td class="time-slot">9:00-10:00</td>';
-            html += '<td><span class="badge badge-cleaning">开档清洁</span><br>沙盘赛车,拍照机,MF,派对房</td>';
-            html += '<td>' + openingStaff.join(', ') + '</td></tr>';
-            
-            // Main shifts
-            const timeAssignments = {};
-            for (let i = 1; i < times.length - 1; i++) {
-                const time = times[i];
-                let assigned = [];
-                timeAssignments[time] = [];
+
+            // Assign staff to time slots based on their group
+            timeSlots.forEach(slot => {
+                const slotAssignments = [];
                 
-                // Assign based on skills
-                stations.forEach((station, idx) => {
-                    const qualified = staff.filter(s => s.skills && s.skills.includes(station));
-                    if (qualified.length > 0) {
-                        const person = qualified[idx % qualified.length];
-                        if (!assigned.find(a => a.staff === person.name)) {
-                            assigned.push({station, staff: person.name});
-                            
-                            // Store detailed assignment
-                            if (!detailedAssignments[person.name + '_' + time]) {
-                                detailedAssignments[person.name + '_' + time] = {
-                                    time: time,
-                                    stations: []
-                                };
-                            }
-                            detailedAssignments[person.name + '_' + time].stations.push(station);
-                            timeAssignments[time].push({station, staff: person.name});
+                // Determine which groups should work this slot
+                const availableGroups = [];
+                Object.keys(availableByGroup).forEach(group => {
+                    const groupInfo = shiftGroups[group];
+                    const [startHour, endHour] = groupInfo.hours.split('-').map(t => parseInt(t));
+                    const currentHour = parseInt(slot.time.split(':')[0]);
+                    
+                    // Check if group works this hour
+                    if (currentHour >= startHour && currentHour < endHour) {
+                        // Handle breaks
+                        if (slot.type === 'lunch_break' && startHour < 13) {
+                            // Morning shift gets lunch break
+                            return;
                         }
+                        if ((slot.type === 'dinner_break_start' || slot.type === 'dinner_break_end') && startHour >= 13) {
+                            // Evening shift gets dinner break
+                            return;
+                        }
+                        availableGroups.push(group);
                     }
                 });
+
+                // Assign stations to available staff
+                const availableStaff = availableGroups.flatMap(group => availableByGroup[group]);
                 
-                if (assigned.length > 0) {
-                    html += '<tr><td class="time-slot">' + time + '</td>';
-                    html += '<td>岗位值班</td>';
-                    html += '<td>' + assigned.map(a => a.station + ': ' + a.staff).join('<br>') + '</td></tr>';
-                }
-            }
-            
-            // Closing
-            const closingStaff = staff.slice(0, 3).map(s => s.name);
-            closingStaff.forEach(name => {
-                detailedAssignments[name + '_22:00-22:30'] = {time: '22:00-22:30', task: '闭档清洁', stations: '皮划艇,滑雪机,冲浪板,保龄球'};
+                stations.forEach((station, stationIdx) => {
+                    const qualified = availableStaff.filter(s => s.skills && s.skills.includes(station));
+                    if (qualified.length > 0) {
+                        const person = qualified[stationIdx % qualified.length];
+                        slotAssignments.push({station, staff: person.name, group: person.group});
+                        
+                        // Store detailed assignment
+                        if (!detailedAssignments[person.name]) detailedAssignments[person.name] = [];
+                        detailedAssignments[person.name].push({
+                            time: slot.time,
+                            type: slot.type,
+                            station: station,
+                            group: person.group
+                        });
+                    }
+                });
+
+                shiftAssignments[slot.time] = slotAssignments;
             });
-            html += '<tr><td class="time-slot">22:00-22:30</td>';
-            html += '<td><span class="badge badge-cleaning">闭档清洁</span><br>皮划艇,滑雪机,冲浪板,保龄球</td>';
-            html += '<td>' + closingStaff.join(', ') + '</td></tr>';
+
+            // Build HTML output
+            let html = '<div class="card"><h2>📋 排班表 - ' + date + '</h2>';
+            html += '<div class="shift-group-info">';
+            html += '<p><strong>类型:</strong> ' + (dayType === 'weekend' ? '周末/节假日' : '工作日') + '</p>';
+            html += '<p><strong>早班DUTY:</strong> <span class="badge badge-duty">' + morningDuty + '</span> | <strong>晚班DUTY:</strong> <span class="badge badge-duty">' + eveningDuty + '</span></p>';
+            html += '<p><strong>早班负责人:</strong> 金越 | <strong>晚班负责人:</strong> 张诗晗</p>';
+            html += '<p><strong>饮料机盘点:</strong> ' + allStaff[0].name + ' | <strong>娃娃机盘点:</strong> ' + (allStaff[1]?.name || allStaff[0].name) + '</p>';
+            html += '</div>';
+            
+            html += '<table><thead><tr><th>时间</th><th>任务/岗位</th><th>人员</th><th>班组</th></tr></thead><tbody>';
+            
+            timeSlots.forEach(slot => {
+                const assignments = shiftAssignments[slot.time] || [];
+                
+                if (slot.type === 'opening') {
+                    html += '<tr><td class="time-slot">' + slot.time + '</td>';
+                    html += '<td><span class="badge badge-cleaning">开档清洁</span><br><small>沙盘赛车,拍照机,MF,派对房</small></td>';
+                    html += '<td>' + assignments.slice(0, 4).map(a => a.staff).join(', ') + '</td>';
+                    html += '<td>' + assignments.slice(0, 4).map(a => a.group).join(', ') + '</td></tr>';
+                } else if (slot.type === 'lunch_break') {
+                    html += '<tr><td class="time-slot">' + slot.time + '</td>';
+                    html += '<td><span class="badge badge-break">午餐休息</span><br><small>早班员工休息</small></td>';
+                    html += '<td>-</td><td>-</td></tr>';
+                } else if (slot.type.includes('dinner_break')) {
+                    html += '<tr><td class="time-slot">' + slot.time + '</td>';
+                    html += '<td><span class="badge badge-break">晚餐休息</span><br><small>晚班员工休息</small></td>';
+                    html += '<td>-</td><td>-</td></tr>';
+                } else if (slot.type === 'closing') {
+                    html += '<tr><td class="time-slot">' + slot.time + '</td>';
+                    html += '<td><span class="badge badge-cleaning">闭档清洁</span><br><small>皮划艇,滑雪机,冲浪板,保龄球</small></td>';
+                    html += '<td>' + assignments.slice(0, 4).map(a => a.staff).join(', ') + '</td>';
+                    html += '<td>' + assignments.slice(0, 4).map(a => a.group).join(', ') + '</td></tr>';
+                } else if (assignments.length > 0) {
+                    html += '<tr><td class="time-slot">' + slot.time + '</td>';
+                    html += '<td>岗位值班</td>';
+                    html += '<td>' + assignments.map(a => a.station + ': ' + a.staff).join('<br>') + '</td>';
+                    html += '<td>' + [...new Set(assignments.map(a => a.group))].join(', ') + '</td></tr>';
+                }
+            });
             
             html += '</tbody></table>';
+            
+            // Add shift group summary
+            html += '<div class="shift-group-info">';
+            html += '<h3>📋 班组安排</h3>';
+            Object.keys(availableByGroup).forEach(group => {
+                if (availableByGroup[group].length > 0) {
+                    html += '<p><strong>' + group + '</strong> (' + shiftGroups[group].hours + '): ' + 
+                           availableByGroup[group].map(s => s.name).join(', ') + '</p>';
+                }
+            });
+            html += '</div>';
             
             // Share link
             html += '<div class="share-box">';
@@ -448,9 +520,10 @@
                 dayType, 
                 morningDuty, 
                 eveningDuty, 
-                staff: staff.map(s => s.name), 
+                staff: allStaff.map(s => s.name), 
                 html,
-                detailedAssignments
+                detailedAssignments,
+                shiftGroups: availableByGroup
             };
         }
 
@@ -492,42 +565,32 @@
                 return;
             }
             
-            // Generate personal view with specific stations
+            // Generate personal view with detailed schedule
             let html = '<div style="margin-top:30px;text-align:left;">';
             html += '<h3>' + name + ' - ' + date + ' 排班</h3>';
             
-            // Check for detailed assignments
-            if (schedule.detailedAssignments) {
-                const times = ['9:00-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:30', 
-                              '13:30-14:30', '14:30-16:00', '16:00-17:00', '17:00-18:00',
-                              '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00', '22:00-22:30'];
-                
-                times.forEach(time => {
-                    const assignment = schedule.detailedAssignments[name + '_' + time];
-                    if (assignment) {
-                        if (assignment.task) {
-                            // Special tasks like opening/closing
-                            html += '<div class="schedule-item">';
-                            html += '<div class="schedule-time">' + time + '</div>';
-                            html += '<div><strong>' + assignment.task + '</strong><br><small>' + assignment.stations + '</small></div>';
-                            html += '</div>';
-                        } else if (assignment.stations && assignment.stations.length > 0) {
-                            // Station assignments
-                            html += '<div class="schedule-item">';
-                            html += '<div class="schedule-time">' + time + '</div>';
-                            html += '<div><strong>岗位值班</strong><br><small>' + assignment.stations.join(', ') + '</small></div>';
-                            html += '</div>';
-                        }
-                    } else if (time === '12:00-13:30' || time === '13:30-14:30') {
-                        // Lunch break
-                        html += '<div class="schedule-item">';
-                        html += '<div class="schedule-time">' + time + '</div>';
-                        html += '<div><strong>休息/吃饭</strong></div>';
-                        html += '</div>';
+            if (schedule.detailedAssignments && schedule.detailedAssignments[name]) {
+                const assignments = schedule.detailedAssignments[name];
+                assignments.forEach(assignment => {
+                    html += '<div class="schedule-item">';
+                    html += '<div class="schedule-time">' + assignment.time + '</div>';
+                    
+                    if (assignment.type === 'opening') {
+                        html += '<div><strong>开档清洁</strong><br><small>沙盘赛车,拍照机,MF,派对房</small></div>';
+                    } else if (assignment.type === 'closing') {
+                        html += '<div><strong>闭档清洁</strong><br><small>皮划艇,滑雪机,冲浪板,保龄球</small></div>';
+                    } else if (assignment.type === 'lunch_break') {
+                        html += '<div><strong>午餐休息</strong><br><small>休息时间</small></div>';
+                    } else if (assignment.type.includes('dinner_break')) {
+                        html += '<div><strong>晚餐休息</strong><br><small>休息时间</small></div>';
+                    } else {
+                        html += '<div><strong>岗位值班</strong><br><small>' + assignment.station + '</small></div>';
                     }
+                    
+                    html += '</div>';
                 });
             } else {
-                // Fallback to generic view if no detailed assignments
+                // Fallback
                 html += '<div class="schedule-item"><div class="schedule-time">9:00-10:00</div><div>开档清洁</div></div>';
                 html += '<div class="schedule-item"><div class="schedule-time">10:00-13:30</div><div>岗位值班</div></div>';
                 html += '<div class="schedule-item"><div class="schedule-time">13:30-14:30</div><div>休息/吃饭</div></div>';
